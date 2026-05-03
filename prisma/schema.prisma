@@ -1,0 +1,66 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Physical server (main or reserve)
+model Server {
+  id                String    @id @default(uuid())
+  name              String
+  country           String    @default("")
+  /// "main" or "reserve"
+  type              String
+  /// "up", "down", or "unknown"
+  status            String    @default("unknown")
+  /// Uptime Kuma monitor name or numeric ID used to match incoming webhooks
+  uptimeMonitorId   String?
+  /// Foreign key to the XuiPanel used for key issuance (reserve servers only)
+  xuiPanelId        String?
+  /// Inbound ID inside the panel to add clients to
+  xuiInboundId      Int?
+  lastCheckedAt     DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  panel    XuiPanel? @relation(fields: [xuiPanelId], references: [id])
+  tempKeys TempKey[]
+}
+
+/// 3x-ui panel credentials
+model XuiPanel {
+  id                String   @id @default(uuid())
+  name              String
+  baseUrl           String
+  username          String
+  /// AES-256-GCM encrypted password: "<iv_hex>:<ciphertext_hex>:<tag_hex>"
+  encryptedPassword String
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  servers  Server[]
+  tempKeys TempKey[]
+}
+
+/// Temporary VLESS key issued during an outage
+model TempKey {
+  id          String    @id @default(uuid())
+  serverId    String
+  panelId     String
+  inboundId   Int
+  /// UUID of the client inside 3x-ui
+  clientId    String
+  clientEmail String
+  /// Plain VLESS URI — no sensitive credentials embedded; shown once
+  vlessUri    String
+  revoked     Boolean   @default(false)
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  server Server   @relation(fields: [serverId], references: [id])
+  panel  XuiPanel @relation(fields: [panelId], references: [id])
+}
